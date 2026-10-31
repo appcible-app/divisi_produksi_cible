@@ -1,0 +1,78 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CIBLE Produksi</title>
+<style id="ps"></style>
+<style>
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:#f6f3fa;color:#222}
+header{background:#4a2c7a;color:#fff;padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+nav a{color:#fff;opacity:.7;padding:6px 10px;border-radius:6px;cursor:pointer;display:inline-block}nav a.on{opacity:1;background:#6d4aa8}
+main{max-width:900px;margin:auto;padding:14px}label{display:block;margin:8px 0;font-size:13px;color:#555}
+input,select{width:100%;padding:9px;border:1px solid #c9bfdb;border-radius:6px;font:inherit;background:#fff}
+button{background:#4a2c7a;color:#fff;border:0;border-radius:6px;padding:9px 14px;margin:6px 6px 6px 0;font:inherit;cursor:pointer}button.g{background:#8a7fa0}button.r{background:#b3261e}
+table{width:100%;border-collapse:collapse;background:#fff;margin-top:8px}td,th{padding:7px;border-bottom:1px solid #eee;text-align:left;font-size:13px}td input{padding:5px;min-width:70px}
+tr[onclick]{cursor:pointer}.w{color:#b3261e}.card{background:#fff;padding:14px;border-radius:10px;margin:8px 0}
+.Proses{color:#b26a00}.Selesai{color:#1b7a3a}.Batal{color:#999}.row{display:flex;gap:8px}.row>*{flex:1}
+#pr{display:none}#toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:9px 16px;border-radius:8px;display:none}
+.lb{overflow:hidden;padding:1.5mm;font:8px/1.2 sans-serif;page-break-after:always;position:relative}.lb svg.bc{width:60%;height:9mm}.lb .qr{position:absolute;right:1.5mm;bottom:1.5mm;width:11mm}.lb .qr svg{width:100%;height:auto}
+@media print{body>*:not(#pr){display:none!important}#pr{display:block}}
+</style></head><body>
+<div id="app"></div><div id="pr"></div><div id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+const DEFAULT_URL=''; // isi URL web app Apps Script (agar QR label bisa dibuka pelanggan)
+const $=s=>document.querySelector(s),H=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const C=JSON.parse(localStorage.cible_prod||'{}'),save=()=>localStorage.cible_prod=JSON.stringify(C),URL_=()=>C.url||DEFAULT_URL;
+const rp=n=>'Rp '+Math.round(+n||0).toLocaleString('id-ID'),today=()=>new Date().toLocaleDateString('sv-SE'),B=id=>D.Barang.find(x=>x.ID==id)||{};
+let D={Produk:[],Barang:[],Resep:[],Produksi:[],ProduksiBahan:[]},T='batch',S={},R={};
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
+async function api(a,d){if(!URL_())throw Error('Isi URL Apps Script di menu Setelan.');
+ const r=await fetch(URL_(),{method:'POST',body:JSON.stringify({action:a,pin:C.pin||'',data:d||{}})}),j=await r.json();if(!j.ok)throw Error(j.error);return j.data}
+async function run(f){try{return await f()}catch(e){toast(e.message)}}
+const load=async()=>{D=await api('prod.data')};
+function shell(h){$('#app').innerHTML=`<header><b>CIBLE Produksi</b><nav>${[['batch','Batch'],['resep','Resep'],['bahan','Bahan'],['scan','Scan'],['set','Setelan']].map(([k,v])=>`<a class="${T==k?'on':''}" onclick="go('${k}')">${v}</a>`).join('')}<a onclick="sessionStorage.clear();location.reload()">Keluar</a></nav></header><main>${h}</main>`}
+async function go(t){T=t;if(t!='set')await run(load);V[t]()}
+// ---------- Login
+function login(){$('#app').innerHTML=`<main style="max-width:340px;margin-top:12vh"><div class=card><h2>CIBLE Produksi</h2><label>Username<input id=lu autocomplete=username></label><label>Password<input id=lp type=password autocomplete=current-password onkeydown="if(event.key=='Enter')masuk()"></label><button onclick=masuk()>Masuk</button></div></main>`}
+function masuk(){if($('#lu').value.trim()=='admin'&&$('#lp').value=='1234'){sessionStorage.ok=1;go('batch')}else toast('Username atau password salah')}
+// ---------- Views
+const V={};
+V.batch=()=>shell(`<button onclick=baru()>+ Batch baru</button><table><tr><th>Kode</th><th>Produk</th><th>Tgl</th><th>Jadi</th><th>HPP/unit</th><th>Status</th></tr>${[...D.Produksi].reverse().map(b=>`<tr onclick="det('${b.Kode}')"><td>${b.Kode}</td><td>${H(b.NamaProduk)}</td><td>${b.TglProduksi}</td><td>${b.QtyJadi||'-'}</td><td>${b.HPP?rp(b.HPP):'-'}</td><td class="${b.Status}">${b.Status}</td></tr>`).join('')}</table>`);
+function baru(){shell(`<div class=card><h3>Batch baru</h3><label>Produk<select id=bp onchange=hit()>${D.Produk.map(p=>`<option value="${H(p.Kode)}">${H(p.Kode)} - ${H(p.Nama)}</option>`)}</select></label><div class=row><label>Jumlah rencana (unit)<input id=bq type=number value=10 oninput=hit()></label><label>Tanggal produksi<input id=bt type=date value="${today()}"></label></div><label>Operator<input id=bo></label><div id=bi></div><button onclick=mulai()>Mulai &amp; ambil bahan</button><button class=g onclick="go('batch')">Batal</button></div>`);hit()}
+function hit(){const r=D.Resep.find(x=>x.KodeProduk==$('#bp').value),q=+$('#bq').value||0;
+ if(!r){S.it=[];$('#bi').innerHTML='<p class=w>Resep produk ini belum dibuat (menu Resep).</p>';return}
+ const f=q/(+r.YieldStandar||1);S.r=r;S.it=JSON.parse(r.Item||'[]').map(i=>({...i,q:+(i.Basis=='Unit'?i.Qty*q:i.Qty*f).toFixed(3)}));
+ $('#bi').innerHTML=`<table><tr><th>Bahan</th><th>Ambil</th><th>Stok</th><th>Est. biaya</th></tr>${S.it.map((i,k)=>{const b=B(i.BarangID);return`<tr><td>${H(i.Nama)}</td><td><input id=q${k} type=number step=any value=${i.q}> ${H(i.Satuan)}</td><td class="${b.Jumlah<i.q?'w':''}">${b.Jumlah??'?'}</td><td>${rp(i.q*b.HargaSatuan)}</td></tr>`}).join('')}</table>`}
+const mulai=()=>run(async()=>{const r=await api('prod.mulai',{KodeProduk:$('#bp').value,QtyRencana:$('#bq').value,TglProduksi:$('#bt').value,Operator:$('#bo').value,Items:S.it.map((i,k)=>({BarangID:i.BarangID,Qty:$('#q'+k).value}))});toast('Batch '+r.Kode+' dimulai');await load();det(r.Kode)});
+function det(k){const b=D.Produksi.find(x=>x.Kode==k);if(!b)return toast('Kode tidak ditemukan');const bh=D.ProduksiBahan.filter(x=>x.Kode==k),p=D.Produk.find(x=>x.Kode==b.KodeProduk)||{},r=D.Resep.find(x=>x.KodeProduk==b.KodeProduk)||{};
+ const fin=b.Status=='Proses'?`<div class=card><h3>Selesaikan batch</h3><div class=row><label>Jumlah jadi<input id=fj type=number step=any value=${b.QtyRencana}></label><label>Reject<input id=fr type=number value=0></label></div><div class=row><label>Biaya tenaga kerja<input id=ft type=number value=${r.BiayaTK||0}></label><label>Overhead<input id=fo type=number value=${r.BiayaOverhead||0}></label></div><label>Exp date<input id=fe type=date value="${b.ExpDate}"></label><p>Isi sisa bahan yang dikembalikan ke persediaan pada kolom Kembali.</p><button onclick="selesai('${k}')">Simpan hasil &amp; hitung HPP</button></div>`:'';
+ const hpp=b.Status=='Selesai'?`<div class=card>Bahan ${rp(b.BiayaBahan)} + TK ${rp(b.BiayaTK)} + Overhead ${rp(b.BiayaOverhead)} = <b>${rp(b.TotalBiaya)}</b><br>HPP per unit: <b>${rp(b.HPP)}</b>${p.Harga?` · Harga jual ${rp(p.Harga)} · Margin ${Math.round((p.Harga-b.HPP)/p.Harga*100)}%`:''}</div><div class=card><h3>Label</h3><div class=row><label>Jumlah label<input id=ln type=number value=${b.QtyJadi}></label><label>Isi<select id=lm><option value=b>Barcode + QR</option><option value=q>QR saja</option></select></label></div><button onclick="cetak('${k}')">Cetak label</button></div>`:'';
+ shell(`<button class=g onclick="go('batch')">‹ Kembali</button><div class=card><h3>${b.Kode} <span class="${b.Status}">${b.Status}</span></h3>${H(b.NamaProduk)}<br>Produksi ${b.TglProduksi} · Exp ${b.ExpDate} · Rencana ${b.QtyRencana}${b.QtyJadi?` · Jadi ${b.QtyJadi} · Reject ${b.QtyReject}`:''}${b.Operator?' · '+H(b.Operator):''}</div>
+ <table><tr><th>Bahan</th><th>Diambil</th><th>Kembali</th><th>Harga</th><th>Biaya</th></tr>${bh.map(x=>`<tr><td>${H(x.Nama)}</td><td>${x.Qty} ${H(x.Satuan)}</td><td>${b.Status=='Proses'?`<input class=kb data-id="${x.BarangID}" type=number step=any value=0>`:x.Kembali}</td><td>${rp(x.HargaSatuan)}</td><td>${rp(x.Biaya)}</td></tr>`).join('')}</table>${fin}${hpp}${b.Status!='Batal'?`<button class=r onclick="batal('${k}')">Batalkan batch</button>`:''}`)}
+const selesai=k=>run(async()=>{await api('prod.selesai',{Kode:k,QtyJadi:$('#fj').value,QtyReject:$('#fr').value,BiayaTK:$('#ft').value,BiayaOverhead:$('#fo').value,ExpDate:$('#fe').value,Kembali:[...document.querySelectorAll('.kb')].map(i=>({BarangID:i.dataset.id,Kembali:i.value}))});await load();toast('Batch selesai, stok produk bertambah');det(k)});
+const batal=k=>confirm('Batalkan batch '+k+'? Bahan dikembalikan ke persediaan.')&&run(async()=>{await api('prod.batal',{Kode:k});await load();det(k)});
+function cetak(k){const b=D.Produksi.find(x=>x.Kode==k),n=Math.min(+$('#ln').value||1,500),m=$('#lm').value,w=C.lw||50,h=C.lh||30,u=(C.pub||location.href.split('#')[0])+'#lacak='+k;
+ $('#ps').textContent=`@page{size:${w}mm ${h}mm;margin:0}.lb{width:${w}mm;height:${h}mm}`;
+ $('#pr').innerHTML=Array(n).fill(`<div class=lb><b style="font-size:9px">${H(b.NamaProduk)}</b><br>Prod ${b.TglProduksi}<br>Exp <b>${b.ExpDate}</b><br>${m=='b'?'<svg class=bc></svg><br>':''}${b.Kode}<div class=qr></div></div>`).join('');
+ if(m=='b'&&window.JsBarcode)document.querySelectorAll('.bc').forEach(s=>JsBarcode(s,k,{format:'CODE128',height:30,displayValue:false,margin:0,width:1.3}));
+ if(window.qrcode){const q=qrcode(0,'M');q.addData(u);q.make();document.querySelectorAll('.qr').forEach(e=>e.innerHTML=q.createSvgTag(2,0))}else toast('Library QR gagal dimuat (cek internet)');
+ setTimeout(()=>print(),200)}
+V.resep=()=>{if(!R.k)R.k=(D.Produk[0]||{}).Kode;const r=D.Resep.find(x=>x.KodeProduk==R.k)||{};if(R.loaded!=R.k){R.items=JSON.parse(r.Item||'[]');R.loaded=R.k}
+ shell(`<div class=card><label>Produk<select onchange="R.k=this.value;V.resep()">${D.Produk.map(p=>`<option value="${H(p.Kode)}" ${p.Kode==R.k?'selected':''}>${H(p.Kode)} - ${H(p.Nama)}</option>`)}</select></label>
+ <div class=row><label>Umur simpan (hari)<input id=ru type=number value=${r.UmurSimpanHari||30}></label><label>Hasil standar / batch (unit)<input id=ry type=number value=${r.YieldStandar||10}></label></div>
+ <div class=row><label>Biaya tenaga kerja / batch<input id=rt type=number value=${r.BiayaTK||0}></label><label>Overhead / batch<input id=ro type=number value=${r.BiayaOverhead||0}></label></div>
+ <table><tr><th>Bahan / kemasan</th><th>Jumlah</th><th>Dihitung</th><th></th></tr>${R.items.map((i,k)=>`<tr><td>${H(i.Nama)}</td><td><input type=number step=any value=${i.Qty} onchange="R.items[${k}].Qty=+this.value"> ${H(i.Satuan)}</td><td><select onchange="R.items[${k}].Basis=this.value"><option value=Batch ${i.Basis!='Unit'?'selected':''}>per batch</option><option value=Unit ${i.Basis=='Unit'?'selected':''}>per unit jadi</option></select></td><td><a onclick="R.items.splice(${k},1);V.resep()">✕</a></td></tr>`).join('')}</table>
+ <label>Tambah item<select id=ri onchange="tambahItem()"><option value="">- pilih -</option>${D.Barang.map(b=>`<option value="${b.ID}">${H(b.Kategori)}: ${H(b.Nama)}</option>`)}</select></label><button onclick=simpanResep()>Simpan resep</button></div>`)};
+function tambahItem(){const b=B($('#ri').value);if(!b.ID)return;R.items.push({BarangID:b.ID,Nama:b.Nama,Satuan:b.Satuan,Qty:1,Basis:b.Kategori=='Kemasan'?'Unit':'Batch'});V.resep()}
+const simpanResep=()=>run(async()=>{await api('prod.simpanResep',{KodeProduk:R.k,UmurSimpanHari:$('#ru').value,YieldStandar:$('#ry').value,BiayaTK:$('#rt').value,BiayaOverhead:$('#ro').value,Item:R.items});R.loaded=null;await load();toast('Resep tersimpan');V.resep()});
+V.bahan=()=>shell(`<button onclick=barangBaru()>+ Barang baru</button><table><tr><th>Nama</th><th>Kategori</th><th>Stok</th><th>Harga</th><th></th></tr>${D.Barang.filter(b=>b.Kategori!='Produk Jadi').map(b=>`<tr><td>${H(b.Nama)}</td><td>${H(b.Kategori)}</td><td>${b.Jumlah} ${H(b.Satuan)}</td><td>${rp(b.HargaSatuan)}</td><td><a onclick="terima('${b.ID}')">+ Terima</a></td></tr>`).join('')}</table>`);
+const terima=id=>{const b=B(id),q=prompt('Jumlah diterima ('+b.Satuan+') untuk '+b.Nama);if(!q)return;const h=prompt('Harga beli per '+b.Satuan+' (Rp)');if(h===null)return;run(async()=>{await api('prod.terimaBahan',{ID:id,Qty:q,Harga:h});await load();V.bahan();toast('Stok diperbarui (harga rata-rata tertimbang)')})};
+const barangBaru=()=>{const n=prompt('Nama barang');if(!n)return;const k=prompt('Kategori: Bahan Baku / Bahan Pembantu / Kemasan','Bahan Baku'),s=prompt('Satuan (kg, pcs, ...)','kg');run(async()=>{await api('saveBarang',{Nama:n,Kategori:k,Satuan:s,Jumlah:0,HargaSatuan:0});await load();V.bahan()})};
+V.scan=()=>shell(`<div class=card><label>Scan barcode atau ketik kode produksi<input id=sk onkeydown="if(event.key=='Enter')det(this.value.trim())" autofocus></label><button onclick="det($('#sk').value.trim())">Cari</button>${window.BarcodeDetector?'<button class=g onclick=kam()>Kamera</button>':''}<video id=vd hidden playsinline style="width:100%"></video></div>`);
+async function kam(){const v=$('#vd'),st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}),d=new BarcodeDetector();v.hidden=false;v.srcObject=st;await v.play();
+ const t=setInterval(async()=>{const r=await d.detect(v).catch(()=>[]);if(r.length){clearInterval(t);st.getTracks().forEach(x=>x.stop());let c=r[0].rawValue;const m=c.match(/lacak=([^&]+)/);det(m?decodeURIComponent(m[1]):c)}},400)}
+V.set=()=>shell(`<div class=card><h3>Setelan</h3><label>URL web app Apps Script<input id=su value="${H(URL_())}"></label><label>PIN aplikasi (APP_PIN)<input id=sp type=password value="${H(C.pin||'')}"></label><div class=row><label>Lebar label (mm)<input id=sw type=number value=${C.lw||50}></label><label>Tinggi label (mm)<input id=sh type=number value=${C.lh||30}></label></div><label>URL publik aplikasi ini (untuk isi QR)<input id=sb placeholder="https://..." value="${H(C.pub||'')}"></label><button onclick=simpanSet()>Simpan</button></div>`);
+function simpanSet(){Object.assign(C,{url:$('#su').value.trim(),pin:$('#sp').value,lw:+$('#sw').value,lh:+$('#sh').value,pub:$('#sb').value.trim()});save();toast('Tersimpan')}
+// ---------- Start
+const m=location.hash.match(/lacak=([^&]+)/);
+if(m&&!sessionStorage.ok&&URL_()){fetch(URL_()+'?action=prod.lacak&kode='+m[1]).then(r=>r.json()).then(j=>{$('#app').innerHTML=`<main style="max-width:420px"><div class=card><h3>${j.ok?H(j.data.NamaProduk):'Tidak ditemukan'}</h3>${j.ok?`Kode produksi: <b>${H(j.data.Kode)}</b><br>Tanggal produksi: ${j.data.TglProduksi}<br>Kedaluwarsa: <b>${j.data.ExpDate}</b><br>Jumlah batch: ${j.data.QtyJadi||'-'}`:H(j.error)}<p><a href="#" onclick="location.hash='';location.reload()">Masuk staf</a></p></div></main>`})}
+else if(sessionStorage.ok){go('batch').then(()=>m&&det(decodeURIComponent(m[1])))}else login();
+</script></body></html>
